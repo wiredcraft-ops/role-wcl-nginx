@@ -9,8 +9,13 @@
   when: nginx_is_el|bool
   tags: [packages,nginx]
 
+- name: Install the openstack packages
+  yum: name=centos-release-openstack-liberty state=present
+  when: nginx_is_el|bool
+  tags: [packages,nginx]
+
 - name: Install the nginx packages
-  yum: name={{ item }} state=present disablerepo='*' enablerepo={{ "nginx," if nginx_official_repo else "" }}{{ yum_epel_repo }},{{ yum_base_repo }}
+  yum: name={{ item }} state=present disablerepo='*' enablerepo={{ "nginx," if nginx_official_repo else "" }}{{ yum_epel_repo }},{{ yum_base_repo }},{{ yum_base_openstack }}
   with_items: nginx_redhat_pkg
   when:  nginx_is_el|bool
   tags: [packages,nginx]

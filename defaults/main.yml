@@ -14,6 +14,7 @@ nginx_suse_pkg:
 
 yum_epel_repo: epel
 yum_base_repo: base
+yum_base_openstack: centos-openstack-liberty
 
 nginx_official_repo: False
 
