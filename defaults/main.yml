@@ -65,4 +65,5 @@ nginx_daemon_mode: "on"
 
 nginx_compile_from_source: false
 nginx_version: 1.10.2
+nginx_openssl_repo_url: https://github.com/openssl/openssl.git
 nginx_openssl_version: OpenSSL_1_1_0f

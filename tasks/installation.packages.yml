@@ -71,7 +71,14 @@
       state: present
       system: true
 
-  # Not sure we need all of them
+  - name: Create nginx tmp directory
+    file:
+      name: /var/lib/nginx/tmp
+      state: directory
+      owner: "{{ nginx_user }}"
+      group: "{{ nginx_group }}"
+
+  # Not sure we need all of these
   - name: Install necessary packages
     yum:
       name: "{{ item }}"
@@ -106,8 +113,8 @@
 
   - name: Clone openssl repository
     git:
-      repo: "{{ openssl_repo_url }}"
-      dest: /usr/local/src/
+      repo: "{{ nginx_openssl_repo_url }}"
+      dest: /usr/local/src/openssl
       version: "{{ nginx_openssl_version }}"
       track_submodules: true
       accept_hostkey: true
