@@ -14,34 +14,179 @@
   when: nginx_is_el|bool
   tags: [packages,nginx]
 
-- name: Install the nginx packages
-  yum: name={{ item }} state=present disablerepo='*' enablerepo={{ "nginx," if nginx_official_repo else "" }}{{ yum_epel_repo }},{{ yum_base_repo }},{{ yum_base_openstack }}
-  with_items: "{{ nginx_redhat_pkg }}"
-  when:  nginx_is_el|bool
-  tags: [packages,nginx]
 
-- name: Install the nginx packages
-  yum: name={{ item }} state=present
-  with_items: "{{ nginx_redhat_pkg }}"
-  when: ansible_os_family == "RedHat" and not nginx_is_el|bool
-  tags: [packages,nginx]
+- block:
+  - name: Install the nginx packages
+    yum: name={{ item }} state=present disablerepo='*' enablerepo={{ "nginx," if nginx_official_repo else "" }}{{ yum_epel_repo }},{{ yum_base_repo }},{{ yum_base_openstack }}
+    with_items: "{{ nginx_redhat_pkg }}"
+    when:  nginx_is_el|bool
+    tags: [packages,nginx]
 
-- name: Install the nginx packages
-  apt: name={{ item }} state=present
-  with_items: "{{ nginx_ubuntu_pkg }}"
-  environment: "{{ nginx_env }}"
-  when: ansible_os_family == "Debian"
-  tags: [packages,nginx]
+  - name: Install the nginx packages
+    yum: name={{ item }} state=present
+    with_items: "{{ nginx_redhat_pkg }}"
+    when: ansible_os_family == "RedHat" and not nginx_is_el|bool
+    tags: [packages,nginx]
 
-- name: Install the nginx packages
-  pkgng: name={{ item }} state=present
-  with_items: "{{ nginx_freebsd_pkg }}"
-  environment: "{{ nginx_env }}"
-  when: ansible_os_family == "FreeBSD"
-  tags: [packages,nginx]
+  - name: Install the nginx packages
+    apt: name={{ item }} state=present
+    with_items: "{{ nginx_ubuntu_pkg }}"
+    environment: "{{ nginx_env }}"
+    when: ansible_os_family == "Debian"
+    tags: [packages,nginx]
 
-- name: Install the nginx packages
-  zypper: name={{ item }} state=present 
-  with_items: "{{ nginx_suse_pkg }}"
-  when: ansible_os_family == "Suse"
-  tags: [packages,nginx]
+  - name: Install the nginx packages
+    pkgng: name={{ item }} state=present
+    with_items: "{{ nginx_freebsd_pkg }}"
+    environment: "{{ nginx_env }}"
+    when: ansible_os_family == "FreeBSD"
+    tags: [packages,nginx]
+
+  - name: Install the nginx packages
+    zypper: name={{ item }} state=present
+    with_items: "{{ nginx_suse_pkg }}"
+    when: ansible_os_family == "Suse"
+    tags: [packages,nginx]
+
+  when: not nginx_compile_from_source
+
+- name: Check if nginx is installed
+  stat:
+    path: /usr/sbin/nginx
+  register: nginx_bin
+
+# CentOS only
+- block:
+  - name: Create nginx user group
+    group:
+      name: "{{ nginx_group }}"
+      state: present
+
+  - name: Create nginx user
+    user:
+      name: "{{ nginx_user }}"
+      group: "{{ nginx_group }}"
+      home: /var/lib/nginx
+      shell: /sbin/nologin
+      state: present
+      system: true
+
+  - name: Create nginx tmp directory
+    file:
+      name: /var/lib/nginx/tmp
+      state: directory
+      owner: "{{ nginx_user }}"
+      group: "{{ nginx_group }}"
+
+  # Not sure we need all of these
+  - name: Install necessary packages
+    yum:
+      name: "{{ item }}"
+      state: present
+    with_items:
+      - git
+      - gcc
+      - pcre-devel
+      - zlib-devel
+      - libxslt-devel
+      - gd-devel
+      - perl
+      - GeoIP-devel
+      - gperftools-devel
+      - perl-devel
+      - perl-ExtUtils-Embed
+
+  - name: Download nginx srource file
+    get_url:
+      url: http://nginx.org/download/nginx-{{ nginx_version }}.tar.gz
+      dest: /tmp/nginx-{{ nginx_version }}.tar.gz
+      owner: root
+      group: root
+
+  - name: Unarchive nginx source file
+    unarchive:
+      src: /tmp/nginx-{{ nginx_version }}.tar.gz
+      dest: /usr/local/src/
+      owner: root
+      group: root
+      remote_src: true
+
+  - name: Clone openssl repository
+    git:
+      repo: "{{ nginx_openssl_repo_url }}"
+      dest: /usr/local/src/openssl
+      version: "{{ nginx_openssl_version }}"
+      track_submodules: true
+      accept_hostkey: true
+      force: true
+
+  - name: Run configure
+    shell: >
+      ./configure --prefix=/usr/share/nginx
+        --sbin-path=/usr/sbin/nginx
+        --modules-path=/usr/lib64/nginx/modules
+        --conf-path=/etc/nginx/nginx.conf
+        --error-log-path=/var/log/nginx/error.log
+        --http-log-path=/var/log/nginx/access.log
+        --http-client-body-temp-path=/var/lib/nginx/tmp/client_body
+        --http-proxy-temp-path=/var/lib/nginx/tmp/proxy
+        --http-fastcgi-temp-path=/var/lib/nginx/tmp/fastcgi
+        --http-uwsgi-temp-path=/var/lib/nginx/tmp/uwsgi
+        --http-scgi-temp-path=/var/lib/nginx/tmp/scgi
+        --pid-path=/run/nginx.pid
+        --lock-path=/run/lock/subsys/nginx
+        --user=nginx
+        --group=nginx
+        --with-file-aio
+        --with-ipv6
+        --with-http_ssl_module
+        --with-http_v2_module
+        --with-http_realip_module
+        --with-http_addition_module
+        --with-http_xslt_module=dynamic
+        --with-http_image_filter_module=dynamic
+        --with-http_geoip_module=dynamic
+        --with-http_sub_module
+        --with-http_dav_module
+        --with-http_flv_module
+        --with-http_mp4_module
+        --with-http_gunzip_module
+        --with-http_gzip_static_module
+        --with-http_random_index_module
+        --with-http_secure_link_module
+        --with-http_degradation_module
+        --with-http_slice_module
+        --with-http_stub_status_module
+        --with-http_perl_module=dynamic
+        --with-mail=dynamic
+        --with-mail_ssl_module
+        --with-pcre
+        --with-pcre-jit
+        --with-stream=dynamic
+        --with-stream_ssl_module
+        --with-google_perftools_module
+        --with-debug
+        --with-openssl=/usr/local/src/openssl
+    args:
+      chdir: /usr/local/src/nginx-{{ nginx_version }}
+
+  - name: Run make and make install
+    shell:
+      make && make install
+    args:
+      chdir: /usr/local/src/nginx-{{ nginx_version }}
+
+  - name: Add systemd service file
+    copy:
+      src: nginx.service
+      dest: /usr/lib/systemd/system/nginx.service
+      owner: root
+      group: root
+
+  - name: Enable nginx
+    systemd:
+      name: nginx
+      enabled: true
+      daemon_reload: true
+
+  when: nginx_compile_from_source and not nginx_bin.stat.exists
